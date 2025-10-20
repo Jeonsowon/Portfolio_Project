@@ -1,0 +1,12 @@
+/* index.css */
+/* 폰트 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Work+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 전체 폰트 설정 */
+body {
+  font-family: 'Noto Sans KR', 'Work Sans', sans-serif;
+}
