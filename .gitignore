@@ -1,2 +1,89 @@
-portfolio-backend/src/.env
-portfolio-backend/target/
+# ===============================
+# 🌐 Common OS & IDE ignores
+# ===============================
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.bak
+*.lock
+.vscode/
+.idea/
+*.iml
+
+# ===============================
+# 🧩 Node.js / React / Vite
+# ===============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.cache/
+coverage/
+.env
+.env.*
+!.env.example
+
+# ===============================
+# ☕ Spring Boot (Java / Maven / Gradle)
+# ===============================
+target/
+build/
+out/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+**/application-*.yml
+**/application-*.properties
+**/.env
+*.war
+*.jar
+
+# ===============================
+# 🐳 Docker & Container
+# ===============================
+docker-compose.override.yml
+.env.docker
+*.pid
+*.seed
+*.db
+
+# ===============================
+# 🧠 IDE Specific
+# ===============================
+*.class
+*.project
+*.classpath
+*.settings/
+.idea/
+*.iml
+*.ipr
+
+# ===============================
+# 🔐 Secrets and credentials
+# ===============================
+*.pem
+*.key
+*.crt
+*.p12
+*.keystore
+secrets/
+credentials/
+config.json
+firebase-key.json
+serviceAccountKey.json
+
+# ===============================
+# 📦 System & Backup
+# ===============================
+*.bak
+*.tmp
+*.log
+*.log.*
+*.gz
+*.zip
+*.tar
+*.tar.gz
