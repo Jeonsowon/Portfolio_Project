@@ -19,7 +19,7 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET:dev-secret-change-me}
-  ttlMillis: 900000
+  ttlMillis: 3000000
 
 openai:
   api-url: https://api.openai.com/v1

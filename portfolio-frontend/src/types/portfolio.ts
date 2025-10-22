@@ -1,3 +1,5 @@
+import type { PortfolioData } from "../types/PortfolioData";
+
 export type PortfolioKind = "BASIC" | "REMODEL";
 
 export type PortfolioSummary = {
@@ -10,7 +12,7 @@ export type PortfolioSummary = {
 export type PortfolioDetail = {
   id: number;
   kind: PortfolioKind;
-  data: any;              // 기존 PortfolioData 형태(JSON) 그대로
+  data: PortfolioData;              // 기존 PortfolioData 형태(JSON) 그대로
 };
 
 export type RawPortfolioItem = {

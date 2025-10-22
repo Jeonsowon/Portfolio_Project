@@ -6,8 +6,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -93,6 +97,22 @@ public class PortfolioController {
         p.setUpdatedAt(Instant.now());
         repo.save(p);
         return Map.of("ok", true, "id", p.getId());
+    }
+
+    // ✅ 삭제    
+    @DeleteMapping("/{id:\\d+}")
+    public ResponseEntity<Map<String, Object>> deletePortfolio(@PathVariable Long id, Authentication auth) {
+        String email = auth.getName();
+
+        Portfolio pf = repo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "존재하지 않는 포트폴리오"));
+
+        if (!pf.getOwnerEmail().equals(email)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "삭제 권한이 없습니다.");
+        }
+
+        repo.delete(pf);
+        return ResponseEntity.ok(Map.of("ok", true, "message", "삭제되었습니다."));
     }
 
     /* ===== helpers ===== */

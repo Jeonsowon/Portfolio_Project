@@ -23,7 +23,7 @@ export async function fetchMyPortfolios(): Promise<{
 
 export async function getPortfolio(id: number): Promise<PortfolioDetail> {
   const { data } = await api.get(`/api/v1/portfolios/${id}`);
-  return data;
+  return data as PortfolioDetail;
 }
 
 export async function createDefault(kind: "BASIC" | "REMODEL" = "BASIC") {
@@ -34,4 +34,9 @@ export async function createDefault(kind: "BASIC" | "REMODEL" = "BASIC") {
 export async function savePortfolio(id: number, dataJson: any) {
   const { data } = await api.put(`/api/v1/portfolios/${id}`, { data: dataJson });
   return data as PortfolioDetail;
+}
+
+export async function deletePortfolio(id: number) {
+  const { data } = await api.delete(`/api/v1/portfolios/${id}`);
+  return data as { ok: boolean; message?: string };
 }
