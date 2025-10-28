@@ -125,10 +125,18 @@ public class PortfolioController {
         return data;
     }
     private Map<String,Object> safeRead(String json) {
-        try { return om.readValue(json, Map.class); }
-        catch (Exception e) { return Map.of(); }
+        try { 
+            @SuppressWarnings("unchecked")
+            Map<String,Object> result = om.readValue(json, Map.class);
+            return result;
+        }
+        catch (RuntimeException | java.io.IOException e) { return Map.of(); }
     }
     private String buildTitleFromData(Map<?,?> data, Long id) {
+        Object title = data.get("title");
+        if (title != null && !title.toString().isBlank()) {
+            return title.toString();
+        }
         Object name = data.get("name");
         Object role = data.get("role");
         String base = (name != null ? name.toString() : "").trim();

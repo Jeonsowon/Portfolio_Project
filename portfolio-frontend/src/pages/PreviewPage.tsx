@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { PortfolioData } from "../types/PortfolioData";
 import { CONTACT_OPTIONS } from "../data/contactOptions";
 import { HiViewGrid, HiViewList, HiChevronLeft, HiChevronRight } from "react-icons/hi";
+import { getPortfolio } from "../lib/portfolioApi";
 
 /* ---------- utils ---------- */
 function formatDate(d?: string) {
@@ -59,13 +60,31 @@ const PreviewPage: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [imageIndex, setImageIndex] = useState<Record<number, number>>({});
+  const [loading, setLoading] = useState<boolean>(false);
+  const [loadedData, setLoadedData] = useState<PortfolioData | null>(null);
 
   // 1순위: state.data, 2순위: sessionStorage draft
   const fallbackRaw = sessionStorage.getItem(DRAFT_KEY(state?.id ?? null));
   const fallback: PortfolioData | null = fallbackRaw ? JSON.parse(fallbackRaw) : null;
 
+  // 필요한 경우 서버에서 상세 데이터 로드 (id만 전달된 경우)
+  useEffect(() => {
+    if (!state?.data && state?.id) {
+      setLoading(true);
+      getPortfolio(state.id)
+        .then((detail) => {
+          setLoadedData(detail.data as unknown as PortfolioData);
+        })
+        .catch(() => {
+          setLoadedData(null);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [state?.id, state?.data]);
+
   const data: PortfolioData =
     state?.data ??
+    loadedData ??
     fallback ?? {
       name: "",
       role: "",
@@ -114,6 +133,14 @@ const PreviewPage: React.FC = () => {
       return { ...prev, [projectIndex]: (current - 1 + total) % total };
     });
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto p-8 min-h-screen flex items-center justify-center text-gray-600">
+        불러오는 중…
+      </div>
+    );
+  }
 
   if (!hasAny) {
     return (

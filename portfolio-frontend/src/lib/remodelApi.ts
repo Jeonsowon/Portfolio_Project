@@ -1,4 +1,6 @@
 // src/lib/remodelApi.ts
+import type { RemodelBuildRes } from "../types/remodel";
+
 type BasicItem = { id: number; kind: "BASIC" | "REMODEL"; title: string; updatedAt: string };
 
 const getToken = () => localStorage.getItem("token") ?? undefined;
@@ -44,7 +46,7 @@ export async function buildRemodel(payload: {
   sourceType: "url" | "text";
   value: string;
   title?: string;
-}) {
+}): Promise<RemodelBuildRes> {
   const headers = {
     "Content-Type": "application/json",
     ...authHeaders(),
@@ -67,5 +69,5 @@ export async function buildRemodel(payload: {
   if (!ct.includes("application/json")) {
     throw new Error(`Expected JSON but got ${ct}. Body: ${text.slice(0, 500)}`);
   }
-  return JSON.parse(text);
+  return JSON.parse(text) as RemodelBuildRes;
 }

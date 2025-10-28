@@ -45,6 +45,8 @@ public class PortfolioData {
         private String role;
         private List<String> techStack = new ArrayList<>();
         private String summary;
+        private String period;
+        private String link;
 
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
@@ -57,5 +59,11 @@ public class PortfolioData {
 
         public String getSummary() { return summary; }
         public void setSummary(String summary) { this.summary = summary; }
+
+        public String getPeriod() { return period; }
+        public void setPeriod(String period) { this.period = period; }
+
+        public String getLink() { return link; }
+        public void setLink(String link) { this.link = link; }
     }
 }

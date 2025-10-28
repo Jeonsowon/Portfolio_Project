@@ -1,15 +1,28 @@
 // src/main/java/com/example/portfolioai/service/RemodelBuildService.java
 package com.example.portfolioai.service;
 
-import com.example.portfolioai.dto.*;
-import com.example.portfolioai.dto.Keyword.Kind;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
+import java.net.URI;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientException;
@@ -17,17 +30,33 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.URI;
-import java.time.Duration;
-import java.util.*;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import com.example.portfolioai.dto.BuildRemodelReq;
+import com.example.portfolioai.dto.JobReqPref;
+import com.example.portfolioai.dto.Keyword;
+import com.example.portfolioai.dto.Keyword.Kind;
+import com.example.portfolioai.dto.PortfolioData;
+import com.example.portfolioai.portfolio.PortfolioEntity;
+import com.example.portfolioai.portfolio.PortfolioRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class RemodelBuildService {
+    public static class RemodelOutcome {
+        private final PortfolioData data;
+        private final List<Keyword> keywords;
+        public RemodelOutcome(PortfolioData data, List<Keyword> keywords) {
+            this.data = data;
+            this.keywords = keywords;
+        }
+        public PortfolioData getData() { return data; }
+        public List<Keyword> getKeywords() { return keywords; }
+    }
+
 
     private final ObjectMapper om;
     private final RestTemplate http;
+    private final PortfolioRepository portfolioRepository;
 
     @Value("${openai.api.key}")
     private String openaiApiKey;
@@ -35,19 +64,17 @@ public class RemodelBuildService {
     @Value("${openai.model:gpt-5}")
     private String openaiModel;
 
-    public RemodelBuildService(ObjectMapper om) {
+    public RemodelBuildService(ObjectMapper om, PortfolioRepository portfolioRepository) {
         this.om = om;
-        this.http = new RestTemplate();
-        this.http.setRequestFactory(req -> {
-            var f = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-            f.setConnectTimeout(10_000);
-            f.setReadTimeout(30_000);
-            return f.createRequest(req.getURI(), req.getMethod());
-        });
+        this.portfolioRepository = portfolioRepository;
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(10));
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        this.http = new RestTemplate(factory);
     }
 
     // ======== Public API ========
-    public PortfolioData buildRemodelSync(RemodelBuildRequest req) {
+    public RemodelOutcome buildRemodelOutcome(BuildRemodelReq req) {
         // 0) Base 불러오기 (여기선 가짜 데이터/혹은 기존 Repo 호출)
         PortfolioData base = loadBasePortfolio(req.getBasePortfolioId());
 
@@ -77,50 +104,68 @@ public class RemodelBuildService {
 
         // 4) 키워드 기반 점수화 → skills / projects 정렬
         PortfolioData reordered = reorderPortfolio(base, keywords);
+        return new RemodelOutcome(reordered, keywords);
+    }
 
-        return reordered;
+    public PortfolioData buildRemodelSync(BuildRemodelReq req) {
+        return buildRemodelOutcome(req).getData();
     }
 
     // ======== Base Portfolio Loader (예시) ========
     private PortfolioData loadBasePortfolio(long id) {
-        // 실제로는 DB/Repo에서 id로 로드. 여기선 간단 샘플 생성
-        PortfolioData p = new PortfolioData();
-        p.setName("전소원");
-        p.setRole("Backend Developer");
-        p.setIntroduction("Spring 기반 백엔드 개발자입니다. 안정성과 확장성을 중시합니다.");
-        p.setSkills(new ArrayList<>(List.of(
-                "Java", "Spring Boot", "JPA/Hibernate", "MySQL", "Redis",
-                "Kafka", "AWS", "Docker", "Kubernetes", "GitHub Actions", "REST API", "TDD", "JUnit", "OAuth2"
-        )));
-        List<ProjectItem> projects = new ArrayList<>();
+        PortfolioEntity entity = portfolioRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "기본 포트폴리오가 없습니다."));
 
-        ProjectItem a = new ProjectItem();
-        a.setTitle("전자상거래 주문/결제 백엔드");
-        a.setSummary("주문/결제 도메인 설계 및 결제 이중화. TPS 2.5배 향상.");
-        a.setTechStack(new ArrayList<>(List.of("Java", "Spring Boot", "MySQL", "Redis", "Kafka", "AWS")));
-        a.setRole("Backend");
-        a.setPeriod("2024.01~2024.08");
-        a.setLink("https://github.com/example/ecommerce");
+        try {
+            Map<String, Object> fe = om.readValue(entity.getDataJson(), new TypeReference<>(){});
 
-        ProjectItem b = new ProjectItem();
-        b.setTitle("실시간 채팅 서비스");
-        b.setSummary("WebSocket 기반 멀티룸. 대화 로그 분석 파이프라인 구성.");
-        b.setTechStack(new ArrayList<>(List.of("Spring Boot", "Redis", "Kafka", "Docker", "Kubernetes", "AWS")));
-        b.setRole("Backend");
-        b.setPeriod("2023.05~2023.12");
-        b.setLink("https://github.com/example/chat");
+            PortfolioData dto = new PortfolioData();
+            dto.setName(Objects.toString(fe.getOrDefault("name", ""), ""));
+            dto.setRole(Objects.toString(fe.getOrDefault("role", ""), ""));
+            dto.setIntroduction(Objects.toString(fe.getOrDefault("introduction", ""), ""));
 
-        ProjectItem c = new ProjectItem();
-        c.setTitle("CI/CD 자동화");
-        c.setSummary("GitHub Actions + ArgoCD로 무중단 배포 파이프라인.");
-        c.setTechStack(new ArrayList<>(List.of("GitHub Actions", "Docker", "Kubernetes", "Helm", "AWS")));
-        c.setRole("DevOps");
-        c.setPeriod("2024.09~2024.12");
-        c.setLink("https://github.com/example/cicd");
+            // skills: [{name, icon}] -> [name]
+            List<String> skills = new ArrayList<>();
+            Object feSkills = fe.get("skills");
+            if (feSkills instanceof List<?> list) {
+                for (Object o : list) {
+                    if (o instanceof Map<?,?> m) {
+                        Object n = m.get("name");
+                        if (n != null) skills.add(Objects.toString(n, ""));
+                    } else if (o instanceof String s) {
+                        skills.add(s);
+                    }
+                }
+            }
+            dto.setSkills(skills);
 
-        projects.add(a); projects.add(b); projects.add(c);
-        p.setProjects(projects);
-        return p;
+            // projects: FE -> DTO(ProjectItem)
+            List<PortfolioData.ProjectItem> projects = new ArrayList<>();
+            Object feProjects = fe.get("projects");
+            if (feProjects instanceof List<?> list) {
+                for (Object o : list) {
+                    if (o instanceof Map<?,?> m) {
+                        PortfolioData.ProjectItem pi = new PortfolioData.ProjectItem();
+                        pi.setTitle(Objects.toString(m.get("title"), ""));
+                        pi.setSummary(Objects.toString(m.get("description"), ""));
+                        pi.setRole(Objects.toString(m.get("myRole"), ""));
+                        // techs -> techStack
+                        List<String> techStack = new ArrayList<>();
+                        Object techs = m.get("techs");
+                        if (techs instanceof List<?> tl) {
+                            for (Object t : tl) techStack.add(Objects.toString(t, ""));
+                        }
+                        pi.setTechStack(techStack);
+                        pi.setLink(Objects.toString(m.get("link"), ""));
+                        projects.add(pi);
+                    }
+                }
+            }
+            dto.setProjects(projects);
+            return dto;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "기본 포트폴리오 파싱 실패");
+        }
     }
 
     // ======== 1) HTML → 클린 텍스트 ========
@@ -231,16 +276,19 @@ public class RemodelBuildService {
             }
             // responses API: { output: [{content:[{type:"output_text", text:"{...json...}"}]}], ... }
             Map<String,Object> root = om.readValue(res.getBody(), new TypeReference<>(){});
-            List<?> output = (List<?>) root.getOrDefault("output", List.of());
+            @SuppressWarnings("unchecked")
+            List<Map<String,Object>> output = (List<Map<String,Object>>) root.getOrDefault("output", List.of());
             if (output.isEmpty()) return List.of();
 
-            Map<?,?> first = (Map<?,?>) output.get(0);
-            List<?> content = (List<?>) first.getOrDefault("content", List.of());
+            Map<String,Object> first = output.get(0);
+            @SuppressWarnings("unchecked")
+            List<Map<String,Object>> content = (List<Map<String,Object>>) first.getOrDefault("content", List.of());
             if (content.isEmpty()) return List.of();
 
-            Map<?,?> item = (Map<?,?>) content.get(0);
+            Map<String,Object> item = content.get(0);
             String text = String.valueOf(item.getOrDefault("text", "{}"));
             Map<String,Object> parsed = om.readValue(text, new TypeReference<>(){});
+            @SuppressWarnings("unchecked")
             List<Map<String,Object>> arr = (List<Map<String,Object>>) parsed.getOrDefault("keywords", List.of());
 
             List<Keyword> keywords = new ArrayList<>();
@@ -266,7 +314,7 @@ public class RemodelBuildService {
                 });
             }
             return new ArrayList<>(dedup.values());
-        } catch (Exception e) {
+        } catch (RuntimeException | java.io.IOException e) {
             // 실패 시 최소 fallback: 자주 나오는 백엔드 키워드
             return List.of(
                     new Keyword("Java", 0.8, Kind.TECH),
@@ -282,14 +330,14 @@ public class RemodelBuildService {
         try {
             if (v instanceof Number n) return n.doubleValue();
             return Double.parseDouble(String.valueOf(v));
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             return dft;
         }
     }
 
     // ======== 4) 키워드 기반 재정렬 ========
     private PortfolioData reorderPortfolio(PortfolioData base, List<Keyword> keywords) {
-        // (a) skills 점수화
+        // (a) skills 점수화 (문자 배열 유지)
         List<String> skills = new ArrayList<>(base.getSkills());
         Map<String, Double> skillScore = new HashMap<>();
         for (String s : skills) {
@@ -307,9 +355,9 @@ public class RemodelBuildService {
         skills.sort(Comparator.comparingDouble(skillScore::get).reversed());
 
         // (b) projects 점수화(제목/요약/스택/역할에서 매칭)
-        List<ProjectItem> projects = new ArrayList<>(base.getProjects());
-        Map<ProjectItem, Double> projScore = new HashMap<>();
-        for (ProjectItem p : projects) {
+        List<PortfolioData.ProjectItem> projects = new ArrayList<>(base.getProjects());
+        Map<PortfolioData.ProjectItem, Double> projScore = new HashMap<>();
+        for (PortfolioData.ProjectItem p : projects) {
             double sc = 0.0;
             for (Keyword k : keywords) {
                 double w = k.getWeight();
@@ -326,13 +374,17 @@ public class RemodelBuildService {
         }
         projects.sort(Comparator.comparingDouble(projScore::get).reversed());
 
-        // (c) 최종 조립 (상위 N만 노출하고 싶으면 여기서 cut)
+        // (c) 추가 섹션 재정렬: contacts, educations, experiences, certifications, awards
+        // base JSON 구조에서 그대로 보존 + 키워드 포함여부 기준으로만 정렬
+        // DTO에는 해당 필드가 없으므로 out에는 skills/projects만 담고, 나머지는 컨트롤러에서 FE 스키마로 재조립
+
+        // (d) 최종 조립 (추가 삽입 없이 재정렬만 수행)
         PortfolioData out = new PortfolioData();
         out.setName(base.getName());
         out.setRole(base.getRole());
         out.setIntroduction(base.getIntroduction());
-        out.setSkills(skills.stream().limit(15).collect(Collectors.toList()));
-        out.setProjects(projects.stream().limit(6).collect(Collectors.toList()));
+        out.setSkills(skills); // 전체를 유지하되 순서만 변경
+        out.setProjects(projects); // 전체를 유지하되 순서만 변경
         return out;
     }
 
