@@ -254,7 +254,7 @@ const PreviewPage: React.FC = () => {
 
       {/* Education */}
       {!!data.educations.length && (
-        <Section title="학력">
+        <Section title="Education">
           <div className="space-y-4">
             {data.educations.map((e, i) => (
               <div key={i}>
@@ -305,7 +305,7 @@ const PreviewPage: React.FC = () => {
 
       {/* Certifications (url 제거) */}
       {!!data.certifications.length && (
-        <Section title="자격증">
+        <Section title="Certifications">
           <ul className="space-y-3">
             {data.certifications.map((c, i) => (
               <li key={i} className="border rounded-lg p-3">
@@ -325,7 +325,7 @@ const PreviewPage: React.FC = () => {
 
       {/* Awards */}
       {!!data.awards.length && (
-        <Section title="수상 경력">
+        <Section title="Awards">
           <ul className="space-y-3">
             {data.awards.map((a, i) => (
               <li key={i} className="border rounded-lg p-3">
