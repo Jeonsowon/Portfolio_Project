@@ -43,6 +43,8 @@ export default function App() {
               </PrivateRoute>
             }
           />
+          {/* 공개 공유용 프리뷰 (비로그인 접근 허용) */}
+          <Route path="/share/preview" element={<PreviewPage />} />
             <Route
             path="/remodel/new"
             element={

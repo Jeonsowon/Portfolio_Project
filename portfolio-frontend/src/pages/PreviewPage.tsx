@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { PortfolioData } from "../types/PortfolioData";
 import { CONTACT_OPTIONS } from "../data/contactOptions";
 import { HiViewGrid, HiViewList, HiChevronLeft, HiChevronRight } from "react-icons/hi";
 import { getPortfolio } from "../lib/portfolioApi";
+// html2canvas/jspdf 제거됨 (인쇄 기반 사용)
 
 /* ---------- utils ---------- */
 function formatDate(d?: string) {
@@ -57,21 +58,28 @@ const PreviewPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState;
+  const pageRef = useRef<HTMLDivElement>(null);
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [imageIndex, setImageIndex] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [loadedData, setLoadedData] = useState<PortfolioData | null>(null);
 
-  // 1순위: state.data, 2순위: sessionStorage draft
-  const fallbackRaw = sessionStorage.getItem(DRAFT_KEY(state?.id ?? null));
+  // 쿼리스트링 id 지원
+  const params = new URLSearchParams(location.search);
+  const queryIdRaw = params.get("id");
+  const queryId = queryIdRaw ? Number(queryIdRaw) : undefined;
+  const effectiveId = state?.id ?? (Number.isFinite(queryId) ? (queryId as number) : undefined);
+
+  // 1순위: state.data, 2순위: sessionStorage draft (id 기준)
+  const fallbackRaw = sessionStorage.getItem(DRAFT_KEY(effectiveId ?? null));
   const fallback: PortfolioData | null = fallbackRaw ? JSON.parse(fallbackRaw) : null;
 
   // 필요한 경우 서버에서 상세 데이터 로드 (id만 전달된 경우)
   useEffect(() => {
-    if (!state?.data && state?.id) {
+    if (!state?.data && effectiveId) {
       setLoading(true);
-      getPortfolio(state.id)
+      getPortfolio(effectiveId)
         .then((detail) => {
           setLoadedData(detail.data as unknown as PortfolioData);
         })
@@ -80,7 +88,7 @@ const PreviewPage: React.FC = () => {
         })
         .finally(() => setLoading(false));
     }
-  }, [state?.id, state?.data]);
+  }, [effectiveId, state?.data]);
 
   const data: PortfolioData =
     state?.data ??
@@ -98,6 +106,8 @@ const PreviewPage: React.FC = () => {
       awards: [],
     };
 
+  // (삭제) html2canvas 인라인 처리
+
   const hasAny =
     !!data.name ||
     !!data.role ||
@@ -113,12 +123,15 @@ const PreviewPage: React.FC = () => {
   const goBackToEdit = () => {
     navigate("/form", {
       state: {
-        id: state?.id,
+        id: effectiveId,
         kind: state?.kind ?? "BASIC",
         data,
       },
     });
   };
+  // (삭제) PDF 다운로드 생성 로직
+
+  // QR 기능 제거됨
 
   // 이미지 좌우 이동
   const handleNextImage = (projectIndex: number, total: number) => {
@@ -164,8 +177,17 @@ const PreviewPage: React.FC = () => {
     );
   }
 
+  const handlePrint = () => {
+    try {
+      window.scrollTo(0, 0);
+      setTimeout(() => window.print(), 50);
+    } catch {
+      alert("인쇄(PDF 저장) 기능 실행 중 오류가 발생했습니다.");
+    }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto p-8 bg-background min-h-screen font-sans pb-28">
+    <div ref={pageRef} className="print-area max-w-4xl mx-auto p-8 bg-background min-h-screen font-sans">
       {/* 헤더 */}
       <div className="text-center mb-12">
         <h1 className="text-4xl font-extrabold text-brand mb-2">{data.name || "이름 미입력"}</h1>
@@ -186,7 +208,11 @@ const PreviewPage: React.FC = () => {
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-brand rounded-lg border border-accent-light hover:bg-gray-200 transition max-w-[260px]"
                 >
-                  {option && <img src={option.icon} alt={c.type} className="w-5 h-5" />}
+                  {option && (
+                    <span className="w-5 h-5 inline-flex items-center justify-center">
+                      <img src={option.icon} alt={c.type} className="w-full h-full object-contain" />
+                    </span>
+                  )}
                   <span className="truncate">{c.value}</span>
                 </a>
               );
@@ -211,7 +237,9 @@ const PreviewPage: React.FC = () => {
             {data.skills.map((skill, index) => (
               <div key={index} className="flex items-center gap-2">
                 {skill.icon ? (
-                  <img src={skill.icon} alt={skill.name} className="w-6 h-6 rounded-full" />
+                  <span className="w-6 h-6 rounded-full bg-white border inline-flex items-center justify-center overflow-hidden">
+                    <img src={skill.icon} alt={skill.name} className="w-full h-full object-contain" />
+                  </span>
                 ) : (
                   <span className="w-6 h-6 rounded-full bg-gray-200 grid place-items-center text-[10px]">
                     {skill.name.slice(0, 2)}
@@ -444,7 +472,7 @@ const PreviewPage: React.FC = () => {
       )}
 
       {/* 하단 가운데 버튼 */}
-      <div className="fixed bottom-0 inset-x-0 bg-white/80 backdrop-blur border-t">
+      <div className="fixed bottom-0 inset-x-0 bg-white/80 backdrop-blur border-t no-print">
         <div className="max-w-4xl mx-auto px-6 py-3">
           <div className="flex items-center justify-center gap-3">
             <button
@@ -452,6 +480,12 @@ const PreviewPage: React.FC = () => {
               className="bg-gray-200 px-6 py-3 rounded-lg hover:bg-gray-300"
             >
               홈으로
+            </button>
+            <button
+              onClick={handlePrint}
+              className="bg-gray-200 px-6 py-3 rounded-lg hover:bg-gray-300"
+            >
+              PDF로 저장(권장)
             </button>
             <button
               onClick={goBackToEdit}

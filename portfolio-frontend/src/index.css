@@ -6,6 +6,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ----- Print styles for PreviewPage ----- */
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .no-print { display: none !important; }
+  /* 인쇄 영역만 꽉 차게 */
+  .print-area {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  /* 카드와 박스 여백 조정으로 페이지 단위 줄바꿈 안정화 */
+  section { break-inside: avoid; page-break-inside: avoid; }
+}
+
 /* 전체 폰트 설정 */
 body {
   font-family: 'Noto Sans KR', 'Work Sans', sans-serif;
