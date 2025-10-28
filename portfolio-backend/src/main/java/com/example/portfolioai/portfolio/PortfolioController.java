@@ -34,14 +34,13 @@ public class PortfolioController {
         this.om = om;
     }
 
-    // ✅ 목록: flat 배열 반환 [{id,kind,title,updatedAt}]
     @GetMapping("/my")
     @Transactional(readOnly = true)
     public List<Map<String, Object>> list(Authentication auth) throws Exception {
         String email = auth.getName();
-        List<Portfolio> all = repo.findByOwnerEmailOrderByUpdatedAtDesc(email);
+        List<PortfolioEntity> all = repo.findByOwnerEmailOrderByUpdatedAtDesc(email);
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Portfolio p : all) {
+        for (PortfolioEntity p : all) {
             Map<?,?> data = safeRead(p.getDataJson());
             String title = buildTitleFromData(data, p.getId());
             out.add(Map.of(
@@ -54,12 +53,12 @@ public class PortfolioController {
         return out;
     }
 
-    // ✅ 상세
     @GetMapping("/{id:\\d+}")
     @Transactional(readOnly = true)
     public Map<String, Object> detail(@PathVariable Long id, Authentication auth) throws Exception {
-        Portfolio p = repo.findById(id).orElseThrow();
-        if (!p.getOwnerEmail().equals(auth.getName())) throw new RuntimeException("forbidden");
+        PortfolioEntity p = repo.findById(id).orElseThrow();
+        if (!p.getOwnerEmail().equals(auth.getName()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "forbidden");
         return Map.of(
             "id", p.getId(),
             "kind", p.getKind().name(),
@@ -67,16 +66,14 @@ public class PortfolioController {
         );
     }
 
-    // ✅ 기본 템플릿 생성 (id 발급)
     @PostMapping("/create-default")
     @Transactional
     public Map<String, Object> createDefault(@RequestBody Map<String, String> body, Authentication auth) throws Exception {
         String email = auth.getName();
-        Portfolio.Kind kind = Portfolio.Kind.valueOf(body.getOrDefault("kind", "BASIC"));
-
+        PortfolioEntity.Kind kind = PortfolioEntity.Kind.valueOf(body.getOrDefault("kind", "BASIC"));
         Map<String, Object> data = defaultData();
 
-        Portfolio p = new Portfolio();
+        PortfolioEntity p = new PortfolioEntity();
         p.setOwnerEmail(email);
         p.setKind(kind);
         p.setDataJson(om.writeValueAsString(data));
@@ -86,12 +83,15 @@ public class PortfolioController {
         return Map.of("id", p.getId(), "kind", p.getKind().name(), "data", data);
     }
 
-    // ✅ 저장(업데이트)
     @PutMapping("/{id:\\d+}")
     @Transactional
-    public Map<String, Object> save(@PathVariable Long id, @RequestBody Map<String, Object> body, Authentication auth) throws Exception {
-        Portfolio p = repo.findById(id).orElseThrow();
-        if (!p.getOwnerEmail().equals(auth.getName())) throw new RuntimeException("forbidden");
+    public Map<String, Object> save(@PathVariable Long id,
+                                    @RequestBody Map<String, Object> body,
+                                    Authentication auth) throws Exception {
+        PortfolioEntity p = repo.findById(id).orElseThrow();
+        if (!p.getOwnerEmail().equals(auth.getName()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "forbidden");
+
         Object data = body.get("data");
         p.setDataJson(om.writeValueAsString(data));
         p.setUpdatedAt(Instant.now());
@@ -99,24 +99,18 @@ public class PortfolioController {
         return Map.of("ok", true, "id", p.getId());
     }
 
-    // ✅ 삭제    
     @DeleteMapping("/{id:\\d+}")
     public ResponseEntity<Map<String, Object>> deletePortfolio(@PathVariable Long id, Authentication auth) {
         String email = auth.getName();
-
-        Portfolio pf = repo.findById(id)
+        PortfolioEntity pf = repo.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "존재하지 않는 포트폴리오"));
-
-        if (!pf.getOwnerEmail().equals(email)) {
+        if (!pf.getOwnerEmail().equals(email))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "삭제 권한이 없습니다.");
-        }
-
         repo.delete(pf);
         return ResponseEntity.ok(Map.of("ok", true, "message", "삭제되었습니다."));
     }
 
-    /* ===== helpers ===== */
-
+    /* helpers */
     private Map<String, Object> defaultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("name", "");
@@ -130,20 +124,17 @@ public class PortfolioController {
         ));
         return data;
     }
-
     private Map<String,Object> safeRead(String json) {
         try { return om.readValue(json, Map.class); }
         catch (Exception e) { return Map.of(); }
     }
-
     private String buildTitleFromData(Map<?,?> data, Long id) {
         Object name = data.get("name");
         Object role = data.get("role");
         String base = (name != null ? name.toString() : "").trim();
         String sub  = (role != null ? role.toString() : "").trim();
-        String title = base.isEmpty() && sub.isEmpty()
-                ? "포트폴리오 #" + id
-                : (base + (sub.isEmpty() ? "" : " - " + sub));
-        return title;
+        return base.isEmpty() && sub.isEmpty()
+            ? "포트폴리오 #" + id
+            : (base + (sub.isEmpty() ? "" : " - " + sub));
     }
 }

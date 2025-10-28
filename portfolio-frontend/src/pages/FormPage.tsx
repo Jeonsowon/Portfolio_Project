@@ -210,7 +210,7 @@ const FormPage: React.FC = () => {
       role: formData.role || undefined,
       bullets,
       techs: p.techs && p.techs.length ? p.techs : undefined,
-      tone: "concise",
+      tone: "insightful",
     };
   }
 
@@ -456,7 +456,512 @@ const FormPage: React.FC = () => {
       </div>
 
       {/* Education */}
-      {/* ...(중략: 아래 섹션들은 기존과 동일, 수정 없음)... */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-8 border border-accent-light">
+        <h2 className="text-2xl font-semibold mb-4 text-brand">Education</h2>
+
+        {(formData.educations ?? []).map((edu, index) => (
+          <div key={index} className="mb-6 border-b pb-6 last:border-none last:pb-0">
+            <input
+              type="text"
+              placeholder="학교명 (예: OO대학교)"
+              value={edu.school}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...(prev.educations ?? [])];
+                  next[index] = { ...next[index], school: v };
+                  return { ...prev, educations: next };
+                });
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="학위 (예: B.S., M.S.)"
+                value={edu.degree ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.educations ?? [])];
+                    next[index] = { ...next[index], degree: v };
+                    return { ...prev, educations: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <input
+                type="text"
+                placeholder="전공 (예: 컴퓨터공학)"
+                value={edu.major ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.educations ?? [])];
+                    next[index] = { ...next[index], major: v };
+                    return { ...prev, educations: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <input
+                type="month"
+                placeholder="시작(YYYY-MM)"
+                value={edu.start ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.educations ?? [])];
+                    next[index] = { ...next[index], start: v };
+                    return { ...prev, educations: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <input
+                type="month"
+                placeholder="종료(YYYY-MM)"
+                value={edu.end ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.educations ?? [])];
+                    next[index] = { ...next[index], end: v };
+                    return { ...prev, educations: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <textarea
+              placeholder="주요 과목/활동/성취 등"
+              value={edu.description ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...(prev.educations ?? [])];
+                  next[index] = { ...next[index], description: v };
+                  return { ...prev, educations: next };
+                });
+              }}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+              className="w-full p-3 border border-accent rounded-lg mt-3 focus:outline-none focus:ring-1 focus:ring-brand overflow-hidden resize-none"
+            />
+
+            <div className="text-right mt-3">
+              <button
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    educations: (prev.educations ?? []).filter((_, i) => i !== index),
+                  }))
+                }
+                className="text-sm px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={() =>
+            setFormData((prev) => ({
+              ...prev,
+              educations: [
+                ...(prev.educations ?? []),
+                { school: "", degree: "", major: "", start: "", end: "", description: "" },
+              ],
+            }))
+          }
+          className="w-full py-3 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+        >
+          + 학력 추가
+        </button>
+      </div>
+
+      {/* ===== Experience ===== */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-8 border border-accent-light">
+        <h2 className="text-2xl font-semibold mb-4 text-brand">Experience</h2>
+
+        {formData.experiences?.map((exp, index) => (
+          <div key={index} className="mb-6 border-b pb-6 last:border-none last:pb-0">
+            <input
+              type="text"
+              placeholder="회사명"
+              value={exp.company}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...prev.experiences];
+                  next[index] = { ...next[index], company: v };
+                  return { ...prev, experiences: next };
+                });
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+
+            <input
+              type="text"
+              placeholder="근무 기간 (예: 2024.03 ~ 2025.02)"
+              value={exp.period}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...prev.experiences];
+                  next[index] = { ...next[index], period: v };
+                  return { ...prev, experiences: next };
+                });
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+
+            <input
+              type="text"
+              placeholder="직무 / 직책 (예: Backend Developer)"
+              value={exp.position}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...prev.experiences];
+                  next[index] = { ...next[index], position: v };
+                  return { ...prev, experiences: next };
+                });
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+
+            <textarea
+              placeholder="담당 업무 및 주요 성과"
+              value={exp.description}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...prev.experiences];
+                  next[index] = { ...next[index], description: v };
+                  return { ...prev, experiences: next };
+                });
+              }}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand overflow-hidden resize-none"
+            />
+
+            {/* 경험 기술 스택 (IME 대응) */}
+            <div className="mb-3">
+              <div className="flex flex-wrap gap-2 mb-2">
+                {exp.techs?.map((tech, i) => (
+                  <span
+                    key={i}
+                    className="px-3 py-1 bg-gray-200 text-brand rounded-full flex items-center gap-2"
+                  >
+                    {tech}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => {
+                          const next = [...prev.experiences];
+                          next[index] = {
+                            ...next[index],
+                            techs: (next[index].techs || []).filter((_, j) => j !== i),
+                          };
+                          return { ...prev, experiences: next };
+                        });
+                      }}
+                      className="text-xs text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <input
+                type="text"
+                placeholder="사용한 기술 입력 후 Enter (예: Spring Boot)"
+                onKeyDown={(e) => {
+                  // IME 조합 중 Enter 무시
+                  if ((e as any).nativeEvent?.isComposing) return;
+
+                  if (e.key === "Enter") {
+                    const v = e.currentTarget.value.trim();
+                    if (!v) return;
+                    e.preventDefault();
+                    setFormData((prev) => {
+                      const next = [...prev.experiences];
+                      next[index] = {
+                        ...next[index],
+                        techs: [...(next[index].techs || []), v],
+                      };
+                      return { ...prev, experiences: next };
+                    });
+                    e.currentTarget.value = "";
+                  }
+                }}
+                className="w-full p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    experiences: prev.experiences.filter((_, i) => i !== index),
+                  }))
+                }
+                className="text-sm px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() =>
+            setFormData((prev) => ({
+              ...prev,
+              experiences: [
+                ...(prev.experiences || []),
+                { company: "", period: "", position: "", description: "", techs: [] },
+              ],
+            }))
+          }
+          className="w-full py-3 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+        >
+          + Experience 추가
+        </button>
+      </div>
+
+      {/* Certifications */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-8 border border-accent-light">
+        <h2 className="text-2xl font-semibold mb-4 text-brand">Certifications</h2>
+
+        {(formData.certifications ?? []).map((c, index) => (
+          <div key={index} className="mb-6 border-b pb-6 last:border-none last:pb-0">
+            <input
+              type="text"
+              placeholder="자격증명 (예: 정보처리기사)"
+              value={c.name}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...(prev.certifications ?? [])];
+                  next[index] = { ...next[index], name: v };
+                  return { ...prev, certifications: next };
+                });
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="발급기관"
+                value={c.issuer ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.certifications ?? [])];
+                    next[index] = { ...next[index], issuer: v };
+                    return { ...prev, certifications: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <input
+                type="text"
+                placeholder="자격번호(선택)"
+                value={c.credentialId ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.certifications ?? [])];
+                    next[index] = { ...next[index], credentialId: v };
+                    return { ...prev, certifications: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <input
+                type="date"
+                placeholder="취득일"
+                value={c.date ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.certifications ?? [])];
+                    next[index] = { ...next[index], date: v };
+                    return { ...prev, certifications: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <input
+                type="date"
+                placeholder="만료일(선택)"
+                value={c.expires ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.certifications ?? [])];
+                    next[index] = { ...next[index], expires: v };
+                    return { ...prev, certifications: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <div className="text-right mt-3">
+              <button
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    certifications: (prev.certifications ?? []).filter((_, i) => i !== index),
+                  }))
+                }
+                className="text-sm px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={() =>
+            setFormData((prev) => ({
+              ...prev,
+              certifications: [
+                ...(prev.certifications ?? []),
+                { name: "", issuer: "", date: "" },
+              ],
+            }))
+          }
+          className="w-full py-3 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+        >
+          + 자격증 추가
+        </button>
+      </div>
+
+      {/* Awards */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-8 border border-accent-light">
+        <h2 className="text-2xl font-semibold mb-4 text-brand">Awards</h2>
+
+        {(formData.awards ?? []).map((a, index) => (
+          <div key={index} className="mb-6 border-b pb-6 last:border-none last:pb-0">
+            <input
+              type="text"
+              placeholder="수상명 (예: 해커톤 대상)"
+              value={a.title}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...(prev.awards ?? [])];
+                  next[index] = { ...next[index], title: v };
+                  return { ...prev, awards: next };
+                });
+              }}
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="주최/발급"
+                value={a.issuer ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.awards ?? [])];
+                    next[index] = { ...next[index], issuer: v };
+                    return { ...prev, awards: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <input
+                type="date"
+                placeholder="수상일"
+                value={a.date ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFormData((prev) => {
+                    const next = [...(prev.awards ?? [])];
+                    next[index] = { ...next[index], date: v };
+                    return { ...prev, awards: next };
+                  });
+                }}
+                className="p-3 border border-accent rounded-lg focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <textarea
+              placeholder="수상 내용/성과"
+              value={a.description ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFormData((prev) => {
+                  const next = [...(prev.awards ?? [])];
+                  next[index] = { ...next[index], description: v };
+                  return { ...prev, awards: next };
+                });
+              }}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+              className="w-full p-3 border border-accent rounded-lg mt-3 focus:outline-none focus:ring-1 focus:ring-brand overflow-hidden resize-none"
+            />
+
+            <div className="text-right mt-3">
+              <button
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    awards: (prev.awards ?? []).filter((_, i) => i !== index),
+                  }))
+                }
+                className="text-sm px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={() =>
+            setFormData((prev) => ({
+              ...prev,
+              awards: [
+                ...(prev.awards ?? []),
+                { title: "", issuer: "", date: "", description: "" },
+              ],
+            }))
+          }
+          className="w-full py-3 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+        >
+          + 수상 경력 추가
+        </button>
+      </div>
 
       {/* ===== Projects ===== */}
       <div className="bg-white shadow-sm rounded-lg p-6 mb-8 border border-accent-light">
@@ -567,12 +1072,19 @@ const FormPage: React.FC = () => {
               name="description"
               placeholder="프로젝트 설명"
               value={project.description ?? ""}
-              onChange={(e) => handleChange(e, index)}
-              onInput={(e) => {
+              onChange={(e) => {
+                handleChange(e, index);
+                // 입력과 동시에 높이 갱신
                 e.currentTarget.style.height = "auto";
                 e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
               }}
-              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand overflow-hidden resize-none"
+              onInput={(e) => {
+                // 새로 그려질 때도 높이 유지
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+              style={{ minHeight: "80px" }} // 기본 최소 높이
+              className="w-full p-3 border border-accent rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-brand overflow-hidden resize-none transition-all duration-150"
             />
 
             <div className="flex justify-between items-center mb-3">

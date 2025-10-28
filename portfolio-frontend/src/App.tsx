@@ -5,6 +5,7 @@ import RegisterPage from "./pages/auth/RegisterPage";
 import FormPage from "./pages/FormPage";
 import PreviewPage from "./pages/PreviewPage";
 import HomePage from "./pages/HomePage";
+import RemodelFormPage from "./pages/RemodelFormPage";
 import PrivateRoute from "./router/PrivateRoute";
 import { AuthProvider } from "./router/AuthContext";
 
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/remodel/new" element={<RemodelFormPage />} />
 
           <Route
             path="/home"
@@ -38,6 +40,14 @@ export default function App() {
             element={
               <PrivateRoute>
                 <PreviewPage />
+              </PrivateRoute>
+            }
+          />
+            <Route
+            path="/remodel/new"
+            element={
+              <PrivateRoute>
+                <RemodelFormPage />
               </PrivateRoute>
             }
           />

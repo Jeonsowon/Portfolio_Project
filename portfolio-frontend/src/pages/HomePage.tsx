@@ -69,8 +69,13 @@ export default function HomePage() {
 
   async function goCreate(kind: "BASIC" | "REMODEL") {
     try {
+      if (kind === "REMODEL") {
+        // ✅ 리모델링은 생성 폼으로 보냄
+        navigate("/remodel/new");
+        return;
+      }
+      // ✅ 기본 포트폴리오는 서버에서 템플릿 발급 후 폼으로 이동
       const created: PortfolioDetail = await createDefault(kind);
-      // 생성 직후 폼으로 이동 (서버가 넘겨준 템플릿 data로 채워서)
       navigate("/form", { state: created });
     } catch (e: any) {
       alert(e?.response?.data?.message || "생성 실패");
@@ -164,7 +169,7 @@ export default function HomePage() {
                 <div>
                   <div className="font-medium">{p.title}</div>
                   <div className="text-xs text-gray-500">
-                    업데이트: {new Date(p.updatedAt).toLocaleString()}
+                    업데이트: {p.updatedAt ? new Date(p.updatedAt).toLocaleString() : "-"}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -212,7 +217,7 @@ export default function HomePage() {
           <h2 className="text-xl font-semibold text-brand mb-2">포트폴리오가 없습니다</h2>
           <p className="text-gray-600 mb-6">새 포트폴리오를 만들어 시작해 보세요.</p>
           <button
-            onClick={() => navigate("/form")}
+            onClick={() => goCreate("BASIC")}
             className="px-5 py-3 bg-brand text-white rounded-lg hover:bg-brand-light"
           >
             + 기본 포트폴리오 생성

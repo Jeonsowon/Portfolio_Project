@@ -1,10 +1,11 @@
-// PortfolioSummaryView.java
 package com.example.portfolioai.portfolio;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 public interface PortfolioSummaryView {
     Long getId();
-    Portfolio.Kind getKind();
-    Instant getUpdatedAt();
+    String getKind();         // "BASIC" | "REMODEL"
+    String getTitle();
+    String getRole();         // 화면 카드에 보여줄 role
+    LocalDateTime getUpdatedAt();
 }
