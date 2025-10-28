@@ -85,7 +85,7 @@ const RemodelFormPage: React.FC = () => {
         <div className="font-semibold mb-2">결과물 기본 정보</div>
         <input
           type="text"
-          placeholder="리모델링 제목(선택)"
+          placeholder="제목 입력"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="w-full p-3 border rounded"

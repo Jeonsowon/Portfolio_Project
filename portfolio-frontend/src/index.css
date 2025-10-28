@@ -9,7 +9,7 @@
 /* ----- Print styles for PreviewPage ----- */
 @page {
   size: A4;
-  margin: 0;
+  margin: 8mm; /* 인쇄 여백 */
 }
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -18,7 +18,7 @@
   .print-area {
     max-width: 100% !important;
     width: 100% !important;
-    padding: 0 !important;
+    padding: 8mm !important; /* 내부 패딩으로 콘텐츠 여백 확보 */
     background: white !important;
   }
   /* 카드와 박스 여백 조정으로 페이지 단위 줄바꿈 안정화 */

@@ -485,7 +485,7 @@ const PreviewPage: React.FC = () => {
               onClick={handlePrint}
               className="bg-gray-200 px-6 py-3 rounded-lg hover:bg-gray-300"
             >
-              PDF로 저장(권장)
+              PDF 저장
             </button>
             <button
               onClick={goBackToEdit}

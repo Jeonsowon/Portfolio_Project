@@ -153,7 +153,7 @@ export default function HomePage() {
             onClick={() => goCreate(kind)}
             className="px-3 py-2 text-sm bg-gray-200 rounded-lg hover:bg-gray-300"
           >
-            + {kind === "BASIC" ? "기본 포트폴리오 생성" : "리모델링 생성"}
+            + {kind === "BASIC" ? "기본 포트폴리오 생성" : "맞춤형 포트폴리오 생성"}
           </button>
         </div>
 
@@ -226,7 +226,7 @@ export default function HomePage() {
       ) : (
         <>
           <Section title="기본 포트폴리오" list={items.basic} kind="BASIC" />
-          <Section title="리모델링 포트폴리오" list={items.remodel} kind="REMODEL" />
+          <Section title="채용 맞춤형 포트폴리오" list={items.remodel} kind="REMODEL" />
         </>
       )}
     </div>
