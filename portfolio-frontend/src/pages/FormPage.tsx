@@ -199,18 +199,27 @@ const FormPage: React.FC = () => {
     const p = formData.projects[index];
 
     const bullets: string[] = [];
-    if (p.description) bullets.push(p.description);
-    if (p.myRole) bullets.push(`My Role: ${p.myRole}`);
+    if (formData.introduction) bullets.push(`Intro: ${formData.introduction}`);
+    if (p.description) bullets.push(`Project: ${p.description}`);
+    if (p.myRole) bullets.push(`Role: ${p.myRole}`);
     if (p.contributions?.length) bullets.push(`Contributions: ${p.contributions.join(", ")}`);
-    if (p.techs?.length) bullets.push(`Techs: ${p.techs.join(", ")}`);
     if (typeof p.teamSize === "number") bullets.push(`Team Size: ${p.teamSize}`);
+    if (p.link) bullets.push(`Link: ${p.link}`);
+    // 경험 요약(있다면 상위 1~2개만 간략히)
+    if (formData.experiences?.length) {
+      const exps = formData.experiences.slice(0, 2).map((e) => `${e.company || ""} ${e.position ? `(${e.position})` : ""} – ${e.description || ""}`.trim());
+      if (exps.length) bullets.push(`Relevant Experience: ${exps.join(" | ")}`);
+    }
+    // 수상/자격증 요약(있다면)
+    if (formData.awards?.length) bullets.push(`Awards: ${formData.awards.slice(0, 2).map((a) => a.title).filter(Boolean).join(", ")}`);
+    if (formData.certifications?.length) bullets.push(`Certifications: ${formData.certifications.slice(0, 2).map((c) => c.name).filter(Boolean).join(", ")}`);
 
     return {
       title: p.title || "Untitled Project",
       role: formData.role || undefined,
       bullets,
       techs: p.techs && p.techs.length ? p.techs : undefined,
-      tone: "insightful",
+      tone: "narrative",
     };
   }
 
@@ -221,9 +230,35 @@ const FormPage: React.FC = () => {
       const payload = buildSummaryReq(index);
       const { summary } = await generateSummary(payload);
 
+      // 마크다운 중 자연스러운 문장 부분만 추출
+      const narrative = (() => {
+        const s = summary || "";
+        // ✅ 섹션 헤더를 기준으로 "요약" 또는 "참고 문장 예시" 우선 추출
+        const sec = (label: string) => {
+          const i = s.indexOf(label);
+          if (i < 0) return "";
+          // 다음 섹션 시작 전까지만 잘라내기
+          const rest = s.slice(i + label.length);
+          const nextIdx = ["\n\n💡", "\n\n📌", "\n\n📘", "\n\n✅"].
+            map((mark) => rest.indexOf(mark)).
+            filter((v) => v >= 0);
+          const end = nextIdx.length ? Math.min(...nextIdx) : rest.length;
+          return rest.slice(0, end).trim();
+        };
+
+        const summaryPart = sec("✅ 요약");
+        const examplePart = sec("📘 참고 문장 예시");
+        const cleaned = (summaryPart || examplePart || s)
+          .replace(/^[\-\s]*\*?\s?/gm, "") // 불릿, 앞 공백 제거
+          .replace(/\n+/g, " ")            // 줄바꿈을 공백으로
+          .replace(/\s{2,}/g, " ")         // 다중 공백 축소
+          .trim();
+        return cleaned;
+      })();
+
       setAiNotes((prev) => {
         const next = [...prev];
-        next[index] = summary; // 참고용 텍스트만 보관
+        next[index] = narrative || summary; // 참고용 텍스트만 보관
         return next;
       });
     } catch (e: any) {
@@ -1094,15 +1129,15 @@ const FormPage: React.FC = () => {
                 disabled={aiLoading === index}
                 className="px-3 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 disabled:opacity-60"
               >
-                {aiLoading === index ? "생성 중…" : "GPT 설명 받기"}
+                {aiLoading === index ? "생성 중…" : "GPT 설명 추천"}
               </button>
             </div>
 
             {/* GPT 제안: 참고용 표시만 */}
             {Boolean(aiNotes[index]?.trim()) && (
-              <div className="mt-3 border border-accent-light rounded-lg bg-gray-50 p-3">
+            <div className="mt-3 border border-accent-light rounded-lg bg-gray-50 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-brand">💡 GPT 제안(참고용)</span>
+                  <span className="text-sm font-semibold text-brand">💡 GPT 설명 추천 결과</span>
                   <button
                     type="button"
                     onClick={() =>
