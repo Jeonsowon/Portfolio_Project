@@ -346,11 +346,11 @@ const PreviewPage: React.FC = () => {
                   {!!totalImages && (
                     <div className="relative mb-4">
                       {viewMode === "grid" ? (
-                        <div className="relative w-full overflow-hidden rounded-lg">
+                        <div className="relative w-full overflow-hidden rounded-lg bg-gray-100">
                           <img
                             src={project.images![currentIndex]}
                             alt={`${project.title}-${currentIndex}`}
-                            className="w-full h-48 md:h-56 object-cover"
+                            className="w-full h-48 md:h-56 object-contain"
                             loading="lazy"
                           />
                           {totalImages > 1 && (
@@ -379,7 +379,7 @@ const PreviewPage: React.FC = () => {
                               key={i}
                               src={img}
                               alt={`${project.title}-${i}`}
-                              className="w-full h-72 md:h-80 object-cover rounded-lg border"
+                              className="w-full h-72 md:h-80 object-contain rounded-lg border bg-gray-100"
                               loading="lazy"
                             />
                           ))}

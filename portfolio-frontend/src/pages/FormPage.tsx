@@ -1215,8 +1215,8 @@ const FormPage: React.FC = () => {
               {!!project.images?.length && (
                 <div className="flex flex-wrap gap-3 mt-3">
                   {project.images.map((img, i) => (
-                    <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden border border-accent">
-                      <img src={img} alt={`project-${i}`} className="object-cover w-full h-full" />
+                    <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden border border-accent bg-gray-100">
+                      <img src={img} alt={`project-${i}`} className="object-contain w-full h-full" />
                       <button
                         type="button"
                         onClick={() =>
