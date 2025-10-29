@@ -34,3 +34,7 @@ logging:
 
 server:
   port: 8080
+
+remodel:
+  ai:
+    enabled: false

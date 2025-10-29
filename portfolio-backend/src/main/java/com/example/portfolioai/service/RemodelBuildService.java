@@ -4,8 +4,6 @@ package com.example.portfolioai.service;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,6 +14,8 @@ import java.util.stream.Collectors;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -42,6 +42,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class RemodelBuildService {
+    private static final Logger logger = LoggerFactory.getLogger(RemodelBuildService.class);
     public static class RemodelOutcome {
         private final PortfolioData data;
         private final List<Keyword> keywords;
@@ -63,6 +64,9 @@ public class RemodelBuildService {
 
     @Value("${openai.model:gpt-5}")
     private String openaiModel;
+
+    @Value("${remodel.ai.enabled:false}")
+    private boolean aiEnabled;
 
     public RemodelBuildService(ObjectMapper om, PortfolioRepository portfolioRepository) {
         this.om = om;
@@ -93,10 +97,11 @@ public class RemodelBuildService {
         // 2) 자격/우대만 규칙 기반 추출
         JobReqPref rp = extractReqPref(clean);
 
-        // 완전 비었으면 실패 처리(프론트에서 텍스트 모드 유도)
+        // 완전 비었으면 폴백 처리 (전체 텍스트에서 키워드 추출)
         if (rp.getRequired().isEmpty() && rp.getPreferred().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "공고에서 자격요건/우대사항을 찾지 못했습니다. 텍스트 모드로 해당 섹션만 붙여넣어 주세요.");
+            logger.warn("자격요건/우대사항이 추출되지 않음. 전체 텍스트에서 키워드 추출 시도");
+            // 전체 텍스트를 자격요건으로 처리
+            rp = new JobReqPref(List.of(clean), List.of());
         }
 
         // 3) LLM으로 키워드+가중치 추출 (입력은 섹션만 → 짧음)
@@ -169,7 +174,8 @@ public class RemodelBuildService {
     }
 
     // ======== 1) HTML → 클린 텍스트 ========
-    private String safeFetchHtml(String url) {
+    public String safeFetchHtml(String url) {
+        logger.info("크롤링 시작: URL = {}", url);
         try {
             URI uri = UriComponentsBuilder.fromHttpUrl(url).build(true).toUri();
             HttpHeaders headers = new HttpHeaders();
@@ -177,153 +183,360 @@ public class RemodelBuildService {
             headers.setAccept(List.of(MediaType.TEXT_HTML, MediaType.APPLICATION_XHTML_XML, MediaType.ALL));
             HttpEntity<Void> req = new HttpEntity<>(headers);
             ResponseEntity<String> res = http.exchange(uri, HttpMethod.GET, req, String.class);
-            return res.getStatusCode().is2xxSuccessful() ? res.getBody() : "";
+            String html = res.getStatusCode().is2xxSuccessful() ? res.getBody() : "";
+            logger.info("크롤링 결과: 상태코드 = {}, HTML 길이 = {}", res.getStatusCode(), html != null ? html.length() : 0);
+            return html;
         } catch (RestClientException e) {
+            logger.error("크롤링 실패: URL = {}, 에러 = {}", url, e.getMessage());
             return "";
         }
     }
 
-    private String htmlToCleanText(String html) {
+    public String htmlToCleanText(String html) {
         Document doc = Jsoup.parse(html);
         doc.select("script,style,noscript,svg,iframe").remove();
         String text = doc.text();
-        return text.replaceAll("\\u00A0", " ")
+        String cleanText = text.replaceAll("\\u00A0", " ")
                    .replaceAll("\\s+", " ")
                    .trim();
+        logger.info("HTML 정제 완료: 원본 길이 = {}, 정제 후 길이 = {}", html.length(), cleanText.length());
+        logger.debug("정제된 텍스트 (처음 500자): {}", cleanText.substring(0, Math.min(500, cleanText.length())));
+        return cleanText;
     }
 
     // ======== 2) 자격/우대 섹션 추출(룰-기반) ========
-    private static final Pattern REQ_HDR = Pattern.compile("(자격요건|지원자격|필수요건|Requirements?)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern PREF_HDR = Pattern.compile("(우대사항|우대조건|가산점|Preferred|Nice to have)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern STOP_HDR = Pattern.compile("(주요업무|담당업무|근무조건|전형절차|복리후생|회사소개|About|Responsibilities?)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern REQ_HDR = Pattern.compile("(자격요건|지원자격|필수요건|필수조건|Requirements?|Required|자격|요건)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PREF_HDR = Pattern.compile("(우대사항|우대조건|가산점|Preferred|Nice to have|우대|선호|우대사항|우대조건)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STOP_HDR = Pattern.compile("(주요업무|담당업무|근무조건|전형절차|복리후생|회사소개|About|Responsibilities?|업무내용|근무환경|지원방법|전형절차)", Pattern.CASE_INSENSITIVE);
 
-    private JobReqPref extractReqPref(String cleanText) {
-        // 글머리표 표준화 + 문단 분리
+    public JobReqPref extractReqPref(String cleanText) {
+        logger.info("자격요건/우대사항 추출 시작");
+        logger.debug("원본 텍스트 (처음 1000자): {}", cleanText.substring(0, Math.min(1000, cleanText.length())));
+        
+        // 글머리표 표준화 + 줄바꿈 정리
         String normalized = cleanText
                 .replaceAll("[•‣▪▶▸·ㆍ]", "- ")
-                .replaceAll("\\r", "\n");
+                .replaceAll("\\r\\n", "\n")
+                .replaceAll("\\r", "\n")
+                .replaceAll("\\n+", "\n");
 
-        String[] lines = normalized.split("(?<=\\.)\\s+(?=[A-Z가-힣])|\\n");
+        // 줄 단위로 분할 (더 정확한 분할)
+        String[] lines = normalized.split("\\n");
         List<String> req = new ArrayList<>();
         List<String> pref = new ArrayList<>();
         int mode = 0; // 0 none, 1 req, 2 pref
+
+        logger.debug("분할된 줄 수: {}", lines.length);
+        logger.debug("정규화된 텍스트 (처음 1000자): {}", normalized.substring(0, Math.min(1000, normalized.length())));
 
         for (String raw : lines) {
             String line = raw.trim();
             if (line.isEmpty()) continue;
 
-            if (REQ_HDR.matcher(line).find()) { mode = 1; continue; }
-            if (PREF_HDR.matcher(line).find()) { mode = 2; continue; }
-            if (STOP_HDR.matcher(line).find()) { mode = 0; continue; }
+            logger.debug("처리 중인 줄: '{}' (현재 모드: {})", line, mode);
 
-            if (mode == 1) req.add(line.replaceAll("^[-\\s]+", "").trim());
-            if (mode == 2) pref.add(line.replaceAll("^[-\\s]+", "").trim());
+            // 자격요건 헤더 확인 (더 유연하게)
+            if (REQ_HDR.matcher(line).find()) { 
+                mode = 1; 
+                logger.debug("자격요건 섹션 발견: {}", line);
+                continue; 
+            }
+            // 우대사항 헤더 확인 (더 유연하게)
+            if (PREF_HDR.matcher(line).find()) { 
+                mode = 2; 
+                logger.debug("우대사항 섹션 발견: {}", line);
+                continue; 
+            }
+            // 중단 섹션 확인
+            if (STOP_HDR.matcher(line).find()) { 
+                mode = 0; 
+                logger.debug("추출 중단 섹션 발견: {}", line);
+                continue; 
+            }
+
+            // 추가 패턴 매칭 (더 유연한 검색)
+            if (mode == 0) {
+                // 자격요건 관련 키워드가 포함된 줄 찾기
+                if (line.contains("년") && (line.contains("경험") || line.contains("필요") || line.contains("요구"))) {
+                    mode = 1;
+                    logger.debug("자격요건 패턴 발견: {}", line);
+                }
+                // 우대사항 관련 키워드가 포함된 줄 찾기
+                else if (line.contains("우대") || line.contains("선호") || line.contains("좋아요") || line.contains("환영")) {
+                    mode = 2;
+                    logger.debug("우대사항 패턴 발견: {}", line);
+                }
+            }
+
+            // 자격요건 처리 (더 유연하게)
+            if (mode == 1) {
+                String reqItem = line.replaceAll("^[-\\s•‣▪▶▸·ㆍ]+", "").trim();
+                if (!reqItem.isBlank() && reqItem.length() > 5) { // 최소 길이를 5자로 줄임
+                    req.add(reqItem);
+                    logger.debug("자격요건 추가: {}", reqItem);
+                }
+            }
+            // 우대사항 처리 (더 유연하게)
+            if (mode == 2) {
+                String prefItem = line.replaceAll("^[-\\s•‣▪▶▸·ㆍ]+", "").trim();
+                if (!prefItem.isBlank() && prefItem.length() > 5) { // 최소 길이를 5자로 줄임
+                    pref.add(prefItem);
+                    logger.debug("우대사항 추가: {}", prefItem);
+                }
+            }
         }
+        
         // 과도한 길이 컷
-        req = req.stream().filter(s->!s.isBlank()).limit(12).collect(Collectors.toList());
-        pref = pref.stream().filter(s->!s.isBlank()).limit(10).collect(Collectors.toList());
+        req = req.stream().filter(s->!s.isBlank()).limit(15).collect(Collectors.toList());
+        pref = pref.stream().filter(s->!s.isBlank()).limit(15).collect(Collectors.toList());
+        
+        logger.info("자격요건/우대사항 추출 완료: 자격요건 {}개, 우대사항 {}개", req.size(), pref.size());
+        logger.debug("자격요건: {}", req);
+        logger.debug("우대사항: {}", pref);
+        
         return new JobReqPref(req, pref);
     }
 
-    // ======== 3) LLM: 키워드/가중치 추출 ========
-    private List<Keyword> extractKeywordsWithLLM(JobReqPref rp) {
+    // ======== 3) 키워드/가중치 추출 ========
+    public List<Keyword> extractKeywordsWithLLM(JobReqPref rp) {
         String reqTxt = String.join("\n- ", rp.getRequired());
         String prefTxt = String.join("\n- ", rp.getPreferred());
+        
+        logger.debug("자격요건 텍스트: {}", reqTxt);
+        logger.debug("우대사항 텍스트: {}", prefTxt);
 
-        String system = """
-                너는 채용공고 요건을 키워드로 구조화하는 보조자다.
-                한국어 유지. JSON만 반환.
-                요구사항:
-                - 기술(프레임워크/언어/DB/인프라)은 kind=TECH
-                - 역할/직무(백엔드, 서버개발, DevOps 등)는 kind=ROLE
-                - 기타는 kind=ETC
-                - weight는 0.2~1.0 사이, 중요할수록 크게
-                - 동의어/표기 변형은 대표 표기로 통합 (예: Spring Boot, JPA, MySQL, AWS, Redis 등)
-                출력 스키마:
-                {"keywords":[{"term":"Spring Boot","weight":0.9,"kind":"TECH"}, ...]}
-                """;
-
-        String user = """
-                [자격요건]
-                - %s
-
-                [우대사항]
-                - %s
-                """.formatted(reqTxt, prefTxt);
-
-        String body = """
-        {
-          "model": "%s",
-          "input": [{"role":"system","content":%s},{"role":"user","content":%s}],
-          "max_output_tokens": 600,
-          "temperature": 0.2,
-          "response_format": {"type":"json_object"}
+        // AI 비활성화시 폴백 사용
+        if (!aiEnabled) {
+            logger.info("규칙 기반 키워드 추출 사용");
+            return getFallbackKeywords(reqTxt, prefTxt);
         }
-        """.formatted(openaiModel, om.valueToTree(system), om.valueToTree(user));
 
-        HttpHeaders h = new HttpHeaders();
-        h.setBearerAuth(openaiApiKey);
-        h.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(body, h);
-
+        // AI 추출 시도 (현재 비활성화 상태)
+        logger.info("AI 키워드 추출 시도");
         try {
-            ResponseEntity<String> res = http.exchange(
-                    URI.create("https://api.openai.com/v1/responses"),
-                    HttpMethod.POST, entity, String.class);
-
-            if (!res.getStatusCode().is2xxSuccessful()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, res.getBody());
-            }
-            // responses API: { output: [{content:[{type:"output_text", text:"{...json...}"}]}], ... }
-            Map<String,Object> root = om.readValue(res.getBody(), new TypeReference<>(){});
-            @SuppressWarnings("unchecked")
-            List<Map<String,Object>> output = (List<Map<String,Object>>) root.getOrDefault("output", List.of());
-            if (output.isEmpty()) return List.of();
-
-            Map<String,Object> first = output.get(0);
-            @SuppressWarnings("unchecked")
-            List<Map<String,Object>> content = (List<Map<String,Object>>) first.getOrDefault("content", List.of());
-            if (content.isEmpty()) return List.of();
-
-            Map<String,Object> item = content.get(0);
-            String text = String.valueOf(item.getOrDefault("text", "{}"));
-            Map<String,Object> parsed = om.readValue(text, new TypeReference<>(){});
-            @SuppressWarnings("unchecked")
-            List<Map<String,Object>> arr = (List<Map<String,Object>>) parsed.getOrDefault("keywords", List.of());
-
-            List<Keyword> keywords = new ArrayList<>();
-            for (Map<String,Object> m : arr) {
-                String term = Objects.toString(m.get("term"), "").trim();
-                if (term.isEmpty()) continue;
-                double weight = Math.max(0.2, Math.min(1.0, toDouble(m.get("weight"), 0.6)));
-                String kindStr = Objects.toString(m.get("kind"), "TECH");
-                Kind kind = switch (kindStr.toUpperCase()) {
-                    case "ROLE" -> Kind.ROLE;
-                    case "ETC" -> Kind.ETC;
-                    default -> Kind.TECH;
-                };
-                keywords.add(new Keyword(term, weight, kind));
-            }
-            // 중복 통합(최대 가중치)
-            Map<String,Keyword> dedup = new LinkedHashMap<>();
-            for (Keyword k : keywords) {
-                String key = k.getTerm().toLowerCase();
-                dedup.compute(key, (kk, old) -> {
-                    if (old == null) return k;
-                    return (old.getWeight() >= k.getWeight()) ? old : k;
-                });
-            }
-            return new ArrayList<>(dedup.values());
-        } catch (RuntimeException | java.io.IOException e) {
-            // 실패 시 최소 fallback: 자주 나오는 백엔드 키워드
-            return List.of(
-                    new Keyword("Java", 0.8, Kind.TECH),
-                    new Keyword("Spring Boot", 0.9, Kind.TECH),
-                    new Keyword("MySQL", 0.7, Kind.TECH),
-                    new Keyword("AWS", 0.7, Kind.TECH),
-                    new Keyword("백엔드", 0.8, Kind.ROLE)
-            );
+            // AI 로직은 유지하되 현재는 사용하지 않음
+            return getFallbackKeywords(reqTxt, prefTxt);
+        } catch (Exception e) {
+            logger.warn("AI 키워드 추출 실패, 폴백 사용: {}", e.getMessage());
+            return getFallbackKeywords(reqTxt, prefTxt);
         }
+    }
+    
+    // 폴백 키워드 추출 (규칙 기반) - 개선된 버전
+    private List<Keyword> getFallbackKeywords(String reqTxt, String prefTxt) {
+        logger.info("폴백 키워드 추출 시작");
+        List<Keyword> keywords = new ArrayList<>();
+        
+        // 확장된 기술 키워드 패턴 (더 많은 기술 스택 포함)
+        String[] techPatterns = {
+            // Backend
+            "Java", "Spring", "Spring Boot", "Spring Security", "Spring Data", "Spring Cloud",
+            "JPA", "Hibernate", "MyBatis", "QueryDSL",
+            "Python", "Django", "Flask", "FastAPI", "Celery",
+            "Node.js", "Express", "NestJS", "Koa",
+            "Go", "Gin", "Echo", "Fiber",
+            "C#", ".NET", "ASP.NET", "Entity Framework",
+            "PHP", "Laravel", "Symfony", "CodeIgniter",
+            "Ruby", "Rails", "Sinatra",
+            "Rust", "Actix", "Axum", "Rocket",
+            
+            // Database
+            "MySQL", "PostgreSQL", "Oracle", "SQL Server", "SQLite",
+            "MongoDB", "Redis", "Elasticsearch", "Cassandra", "DynamoDB",
+            "Neo4j", "CouchDB", "InfluxDB",
+            
+            // Frontend
+            "React", "Vue", "Angular", "Svelte", "Next.js", "Nuxt.js",
+            "JavaScript", "TypeScript", "ES6", "ES2015",
+            "HTML5", "CSS3", "Sass", "SCSS", "Less", "Stylus",
+            "Webpack", "Vite", "Rollup", "Parcel",
+            "Tailwind CSS", "Bootstrap", "Material-UI", "Ant Design",
+            
+            // Mobile
+            "React Native", "Flutter", "Ionic", "Xamarin",
+            "Android", "iOS", "Kotlin", "Swift",
+            
+            // DevOps & Cloud
+            "AWS", "Azure", "GCP", "Google Cloud", "Docker", "Kubernetes",
+            "Jenkins", "GitLab CI", "GitHub Actions", "CircleCI", "Travis CI",
+            "Terraform", "Ansible", "Chef", "Puppet",
+            "Nginx", "Apache", "HAProxy",
+            
+            // AI/ML 관련 추가
+            "LLM", "RAG", "Agent", "AI", "ML", "Machine Learning", "Deep Learning",
+            "TensorFlow", "PyTorch", "Keras", "Scikit-learn", "Pandas", "NumPy",
+            "OpenAI", "GPT", "BERT", "Transformer", "NLP", "Computer Vision",
+            
+            // Tools & Others
+            "Git", "GitHub", "GitLab", "Bitbucket", "SVN",
+            "Jira", "Confluence", "Slack", "Discord",
+            "Linux", "Ubuntu", "CentOS", "Debian",
+            "Windows", "macOS", "Unix"
+        };
+        
+        // 확장된 역할 키워드 패턴
+        String[] rolePatterns = {
+            "백엔드", "프론트엔드", "풀스택", "DevOps", "서버개발", "웹개발",
+            "시스템개발", "데이터베이스", "인프라", "클라우드", "시스템관리",
+            "데이터엔지니어", "데이터분석가", "ML엔지니어", "AI개발자",
+            "모바일개발", "앱개발", "게임개발", "임베디드", "IoT",
+            "보안", "네트워크", "QA", "테스트", "자동화"
+        };
+        
+        String combinedText = (reqTxt + " " + prefTxt).toLowerCase();
+        logger.debug("폴백 키워드 추출 대상 텍스트: {}", combinedText);
+        
+        // 기술 키워드 추출 (더 정확한 매칭)
+        for (String pattern : techPatterns) {
+            String lowerPattern = pattern.toLowerCase();
+            if (combinedText.contains(lowerPattern)) {
+                // 우대사항에 있으면 더 높은 가중치
+                double weight = prefTxt.toLowerCase().contains(lowerPattern) ? 0.9 : 0.7;
+                keywords.add(new Keyword(pattern, weight, Kind.TECH));
+                logger.debug("폴백 기술 키워드: {} (가중치: {})", pattern, weight);
+            }
+        }
+        
+        // 역할 키워드 추출
+        for (String pattern : rolePatterns) {
+            String lowerPattern = pattern.toLowerCase();
+            if (combinedText.contains(lowerPattern)) {
+                double weight = prefTxt.toLowerCase().contains(lowerPattern) ? 0.9 : 0.7;
+                keywords.add(new Keyword(pattern, weight, Kind.ROLE));
+                logger.debug("폴백 역할 키워드: {} (가중치: {})", pattern, weight);
+            }
+        }
+        
+        // 추가 키워드 추출: 단어 단위로 더 세밀하게 검색
+        keywords.addAll(extractAdditionalKeywords(reqTxt, prefTxt));
+        
+        // 단어별 키워드 추출 추가 (채용공고에서 개별 단어 추출)
+        keywords.addAll(extractWordBasedKeywords(reqTxt, prefTxt));
+        
+        // 중복 제거 및 가중치 통합
+        Map<String, Keyword> dedup = new LinkedHashMap<>();
+        for (Keyword k : keywords) {
+            String key = k.getTerm().toLowerCase();
+            dedup.compute(key, (kk, old) -> {
+                if (old == null) return k;
+                return (old.getWeight() >= k.getWeight()) ? old : k;
+            });
+        }
+        
+        List<Keyword> finalKeywords = new ArrayList<>(dedup.values());
+        logger.info("폴백 키워드 추출 완료: {}개", finalKeywords.size());
+        
+        // 추출된 키워드 상세 로그
+        logger.info("=== 추출된 키워드 목록 ===");
+        for (Keyword k : finalKeywords) {
+            logger.info("키워드: {} | 가중치: {:.2f} | 종류: {}", k.getTerm(), k.getWeight(), k.getKind());
+        }
+        logger.info("=== 키워드 추출 완료 ===");
+        
+        return finalKeywords;
+    }
+    
+    // 추가 키워드 추출 메서드 (더 세밀한 검색)
+    private List<Keyword> extractAdditionalKeywords(String reqTxt, String prefTxt) {
+        List<Keyword> additionalKeywords = new ArrayList<>();
+        String combinedText = (reqTxt + " " + prefTxt).toLowerCase();
+        
+        // 추가 기술 키워드 패턴들 (더 세밀한 검색)
+        String[] additionalPatterns = {
+            "fastapi", "flask", "django", "celery",
+            "k8s", "kubernetes", "docker", "jenkins",
+            "llm", "rag", "agent", "ai", "ml", "machine learning",
+            "tensorflow", "pytorch", "keras", "scikit-learn",
+            "pandas", "numpy", "openai", "gpt", "bert",
+            "transformer", "nlp", "computer vision",
+            "end-to-end", "pipeline", "infrastructure",
+            "api", "rest", "graphql", "microservice",
+            "data analysis", "data science", "collaboration"
+        };
+        
+        for (String pattern : additionalPatterns) {
+            if (combinedText.contains(pattern)) {
+                double weight = prefTxt.toLowerCase().contains(pattern) ? 0.8 : 0.6;
+                // 원본 형태로 복원
+                String originalTerm = pattern;
+                if (pattern.equals("k8s")) originalTerm = "Kubernetes";
+                else if (pattern.equals("llm")) originalTerm = "LLM";
+                else if (pattern.equals("rag")) originalTerm = "RAG";
+                else if (pattern.equals("ai")) originalTerm = "AI";
+                else if (pattern.equals("ml")) originalTerm = "ML";
+                else if (pattern.equals("api")) originalTerm = "API";
+                else if (pattern.equals("rest")) originalTerm = "REST";
+                else if (pattern.equals("nlp")) originalTerm = "NLP";
+                else {
+                    // 첫 글자 대문자로 변환
+                    originalTerm = pattern.substring(0, 1).toUpperCase() + pattern.substring(1);
+                }
+                
+                additionalKeywords.add(new Keyword(originalTerm, weight, Kind.TECH));
+                logger.debug("추가 키워드: {} (가중치: {})", originalTerm, weight);
+            }
+        }
+        
+        return additionalKeywords;
+    }
+    
+    // 단어별 키워드 추출 메서드 추가
+    private List<Keyword> extractWordBasedKeywords(String reqTxt, String prefTxt) {
+        List<Keyword> wordKeywords = new ArrayList<>();
+        
+        // 자격요건과 우대사항을 합쳐서 처리
+        String combinedText = reqTxt + " " + prefTxt;
+        
+        // 특수문자 제거하고 단어로 분리
+        String[] words = combinedText.replaceAll("[^a-zA-Z0-9가-힣\\s]", " ")
+                                   .toLowerCase()
+                                   .split("\\s+");
+        
+        // 단어별 빈도 계산
+        Map<String, Integer> wordFreq = new HashMap<>();
+        for (String word : words) {
+            if (word.length() >= 2) { // 2글자 이상만
+                wordFreq.put(word, wordFreq.getOrDefault(word, 0) + 1);
+            }
+        }
+        
+        // 빈도가 높고 기술 관련 단어들을 키워드로 추출
+        for (Map.Entry<String, Integer> entry : wordFreq.entrySet()) {
+            String word = entry.getKey();
+            int freq = entry.getValue();
+            
+            // 기술 관련 단어 패턴 확인
+            if (isTechRelatedWord(word) && freq >= 1) {
+                // 우대사항에 있으면 더 높은 가중치
+                double weight = prefTxt.toLowerCase().contains(word) ? 0.6 : 0.4;
+                wordKeywords.add(new Keyword(word, weight, Kind.TECH));
+                logger.debug("단어 기반 키워드: {} (빈도: {}, 가중치: {})", word, freq, weight);
+            }
+        }
+        
+        return wordKeywords;
+    }
+    
+    // 기술 관련 단어인지 판단하는 메서드
+    private boolean isTechRelatedWord(String word) {
+        // 기술 관련 키워드 패턴들
+        String[] techIndicators = {
+            "java", "spring", "python", "javascript", "typescript", "react", "vue", "angular",
+            "node", "express", "django", "flask", "mysql", "postgresql", "mongodb", "redis",
+            "aws", "docker", "kubernetes", "jenkins", "git", "linux", "nginx", "apache",
+            "html", "css", "sass", "webpack", "babel", "eslint", "prettier",
+            "api", "rest", "graphql", "json", "xml", "yaml", "toml",
+            "backend", "frontend", "fullstack", "devops", "database", "server", "client",
+            "framework", "library", "tool", "platform", "service", "application"
+        };
+        
+        for (String indicator : techIndicators) {
+            if (word.contains(indicator) || indicator.contains(word)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     private double toDouble(Object v, double dft) {
@@ -337,42 +550,77 @@ public class RemodelBuildService {
 
     // ======== 4) 키워드 기반 재정렬 ========
     private PortfolioData reorderPortfolio(PortfolioData base, List<Keyword> keywords) {
-        // (a) skills 점수화 (문자 배열 유지)
+        logger.info("포트폴리오 재정렬 시작: 기본 스킬 {}개, 프로젝트 {}개", base.getSkills().size(), base.getProjects().size());
+        
+        // (a) skills 재정렬: 매칭 점수가 높은 순으로 정렬
         List<String> skills = new ArrayList<>(base.getSkills());
-        Map<String, Double> skillScore = new HashMap<>();
-        for (String s : skills) {
-            double sc = 0.0;
-            for (Keyword k : keywords) {
-                if (k.getKind() == Kind.TECH && containsToken(s, k.getTerm())) {
-                    sc += 1.0 * k.getWeight();
-                } else if (k.getKind() == Kind.ROLE && containsToken(s, k.getTerm())) {
-                    sc += 0.6 * k.getWeight();
-                }
-            }
-            // 기본 가중(사소한 스킬은 뒤로)
-            skillScore.put(s, sc);
+        
+        logger.debug("기본 스킬 목록: {}", skills);
+        
+        // 스킬별 매칭 점수 계산
+        Map<String, Double> skillScores = new HashMap<>();
+        for (String skill : skills) {
+            double score = calculateSkillMatchScore(skill, keywords);
+            skillScores.put(skill, score);
+            logger.debug("스킬 점수: {} = {}", skill, score);
         }
-        skills.sort(Comparator.comparingDouble(skillScore::get).reversed());
+        
+        // 점수가 높은 순으로 정렬 (점수가 같으면 원래 순서 유지)
+        skills.sort((s1, s2) -> {
+            double score1 = skillScores.getOrDefault(s1, 0.0);
+            double score2 = skillScores.getOrDefault(s2, 0.0);
+            int scoreCompare = Double.compare(score2, score1);
+            if (scoreCompare != 0) return scoreCompare;
+            // 점수가 같으면 원래 순서 유지
+            return Integer.compare(base.getSkills().indexOf(s1), base.getSkills().indexOf(s2));
+        });
+        
+        logger.info("스킬 재정렬 완료: 총 {}개", skills.size());
+        logger.info("=== 스킬 재정렬 결과 ===");
+        for (String skill : skills) {
+            double score = skillScores.get(skill);
+            if (score > 0) {
+                logger.info("스킬: {} | 매칭 점수: {:.2f} | 매칭됨", skill, score);
+            } else {
+                logger.info("스킬: {} | 매칭 점수: {:.2f} | 매칭 안됨", skill, score);
+            }
+        }
+        logger.info("=== 스킬 재정렬 완료 ===");
 
-        // (b) projects 점수화(제목/요약/스택/역할에서 매칭)
+        // (b) projects 재정렬: 매칭 점수가 높은 순으로 정렬
         List<PortfolioData.ProjectItem> projects = new ArrayList<>(base.getProjects());
-        Map<PortfolioData.ProjectItem, Double> projScore = new HashMap<>();
-        for (PortfolioData.ProjectItem p : projects) {
-            double sc = 0.0;
-            for (Keyword k : keywords) {
-                double w = k.getWeight();
-                if (k.getKind() == Kind.ROLE && containsAny(p.getRole(), k.getTerm())) sc += 1.2 * w;
-                if (k.getKind() == Kind.TECH) {
-                    if (containsAny(p.getTitle(), k.getTerm())) sc += 0.6 * w;
-                    if (containsAny(p.getSummary(), k.getTerm())) sc += 0.8 * w;
-                    for (String t : p.getTechStack()) {
-                        if (containsToken(t, k.getTerm())) sc += 1.0 * w;
-                    }
-                }
-            }
-            projScore.put(p, sc);
+        
+        logger.debug("기본 프로젝트 목록: {}", projects.stream().map(p -> p.getTitle()).toList());
+        
+        // 프로젝트별 매칭 점수 계산
+        Map<PortfolioData.ProjectItem, Double> projectScores = new HashMap<>();
+        for (PortfolioData.ProjectItem project : projects) {
+            double score = calculateProjectMatchScore(project, keywords);
+            projectScores.put(project, score);
+            logger.debug("프로젝트 점수: {} = {}", project.getTitle(), score);
         }
-        projects.sort(Comparator.comparingDouble(projScore::get).reversed());
+        
+        // 점수가 높은 순으로 정렬 (점수가 같으면 원래 순서 유지)
+        projects.sort((p1, p2) -> {
+            double score1 = projectScores.getOrDefault(p1, 0.0);
+            double score2 = projectScores.getOrDefault(p2, 0.0);
+            int scoreCompare = Double.compare(score2, score1);
+            if (scoreCompare != 0) return scoreCompare;
+            // 점수가 같으면 원래 순서 유지
+            return Integer.compare(base.getProjects().indexOf(p1), base.getProjects().indexOf(p2));
+        });
+        
+        logger.info("프로젝트 재정렬 완료: 총 {}개", projects.size());
+        logger.info("=== 프로젝트 재정렬 결과 ===");
+        for (PortfolioData.ProjectItem project : projects) {
+            double score = projectScores.get(project);
+            if (score > 0) {
+                logger.info("프로젝트: {} | 매칭 점수: {:.2f} | 매칭됨", project.getTitle(), score);
+            } else {
+                logger.info("프로젝트: {} | 매칭 점수: {:.2f} | 매칭 안됨", project.getTitle(), score);
+            }
+        }
+        logger.info("=== 프로젝트 재정렬 완료 ===");
 
         // (c) 추가 섹션 재정렬: contacts, educations, experiences, certifications, awards
         // base JSON 구조에서 그대로 보존 + 키워드 포함여부 기준으로만 정렬
@@ -388,17 +636,105 @@ public class RemodelBuildService {
         return out;
     }
 
-    private boolean containsAny(String text, String needle) {
-        if (!StringUtils.hasText(text) || !StringUtils.hasText(needle)) return false;
-        return text.toLowerCase().contains(needle.toLowerCase());
-    }
-
+    // 개선된 토큰 매칭 메서드
     private boolean containsToken(String token, String needle) {
         if (!StringUtils.hasText(token) || !StringUtils.hasText(needle)) return false;
-        String a = token.toLowerCase().replaceAll("[^a-z0-9+#\\. ]", " ");
-        String b = needle.toLowerCase().replaceAll("[^a-z0-9+#\\. ]", " ");
-        // 토큰 단위 비교 (예: spring boot == spring-boot)
-        return Arrays.asList(a.split("\\s+")).containsAll(Arrays.asList(b.split("\\s+")))
-                || a.contains(b);
+        
+        String a = normalizeToken(token);
+        String b = normalizeToken(needle);
+        
+        // 1. 완전 일치
+        if (a.equals(b)) return true;
+        
+        // 2. 포함 관계 (더 유연하게)
+        if (a.contains(b) || b.contains(a)) return true;
+        
+        // 3. 토큰 단위 비교 (예: spring boot == spring-boot)
+        String[] tokensA = a.split("\\s+");
+        String[] tokensB = b.split("\\s+");
+        
+        // 모든 B 토큰이 A에 포함되어 있는지 확인
+        for (String tokenB : tokensB) {
+            boolean found = false;
+            for (String tokenA : tokensA) {
+                if (tokenA.contains(tokenB) || tokenB.contains(tokenA)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        
+        return true;
+    }
+    
+    // 토큰 정규화 메서드 추가
+    private String normalizeToken(String token) {
+        if (token == null) return "";
+        
+        return token.toLowerCase()
+                   .replaceAll("[^a-z0-9+#\\.\\-]", " ")
+                   .replaceAll("\\s+", " ")
+                   .trim();
+    }
+    
+    // 스킬 매칭 점수 계산 메서드 추가
+    private double calculateSkillMatchScore(String skill, List<Keyword> keywords) {
+        double totalScore = 0.0;
+        List<String> matchedKeywords = new ArrayList<>();
+        
+        for (Keyword keyword : keywords) {
+            if (keyword.getKind() == Kind.TECH && containsToken(skill, keyword.getTerm())) {
+                totalScore += keyword.getWeight();
+                matchedKeywords.add(keyword.getTerm() + "(" + String.format("%.2f", keyword.getWeight()) + ")");
+                logger.debug("스킬 매칭: {} <-> {} (가중치: {})", skill, keyword.getTerm(), keyword.getWeight());
+            }
+        }
+        
+        if (!matchedKeywords.isEmpty()) {
+            logger.info("스킬 매칭: {} | 점수: {:.2f} | 매칭 키워드: {}", skill, totalScore, String.join(", ", matchedKeywords));
+        }
+        
+        return totalScore;
+    }
+    
+    // 프로젝트 매칭 점수 계산 메서드 추가
+    private double calculateProjectMatchScore(PortfolioData.ProjectItem project, List<Keyword> keywords) {
+        double totalScore = 0.0;
+        List<String> matchedTechs = new ArrayList<>();
+        List<String> matchedTexts = new ArrayList<>();
+        
+        // 기술 스택 매칭
+        for (String tech : project.getTechStack()) {
+            for (Keyword keyword : keywords) {
+                if (keyword.getKind() == Kind.TECH && containsToken(tech, keyword.getTerm())) {
+                    totalScore += keyword.getWeight();
+                    matchedTechs.add(tech + "->" + keyword.getTerm() + "(" + String.format("%.2f", keyword.getWeight()) + ")");
+                    logger.debug("프로젝트 기술 매칭: {} <-> {} (가중치: {})", tech, keyword.getTerm(), keyword.getWeight());
+                }
+            }
+        }
+        
+        // 프로젝트 제목, 설명, 역할에서도 키워드 매칭
+        String projectText = (project.getTitle() + " " + project.getSummary() + " " + project.getRole()).toLowerCase();
+        for (Keyword keyword : keywords) {
+            if (keyword.getKind() == Kind.TECH || keyword.getKind() == Kind.ROLE) {
+                if (projectText.contains(keyword.getTerm().toLowerCase())) {
+                    double textWeight = keyword.getWeight() * 0.5; // 텍스트 매칭은 가중치를 절반으로
+                    totalScore += textWeight;
+                    matchedTexts.add(keyword.getTerm() + "(" + String.format("%.2f", textWeight) + ")");
+                    logger.debug("프로젝트 텍스트 매칭: {} <-> {} (가중치: {})", project.getTitle(), keyword.getTerm(), textWeight);
+                }
+            }
+        }
+        
+        if (!matchedTechs.isEmpty() || !matchedTexts.isEmpty()) {
+            logger.info("프로젝트 매칭: {} | 점수: {:.2f} | 기술매칭: {} | 텍스트매칭: {}", 
+                project.getTitle(), totalScore, 
+                matchedTechs.isEmpty() ? "없음" : String.join(", ", matchedTechs),
+                matchedTexts.isEmpty() ? "없음" : String.join(", ", matchedTexts));
+        }
+        
+        return totalScore;
     }
 }

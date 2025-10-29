@@ -34,6 +34,7 @@ public class SecurityConfig {
               .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
               .requestMatchers("/error").permitAll()
               .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
+              .requestMatchers(HttpMethod.POST, "/api/v1/remodel/debug").permitAll()
               .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
               .anyRequest().authenticated()
           )

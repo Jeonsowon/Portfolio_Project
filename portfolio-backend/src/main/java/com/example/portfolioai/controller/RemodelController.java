@@ -2,6 +2,8 @@
 package com.example.portfolioai.controller;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.example.portfolioai.dto.BuildRemodelReq;
+import com.example.portfolioai.dto.JobReqPref;
+import com.example.portfolioai.dto.Keyword;
 import com.example.portfolioai.dto.PortfolioData;
 import com.example.portfolioai.portfolio.PortfolioEntity;
 import com.example.portfolioai.portfolio.PortfolioRepository;
@@ -149,5 +153,37 @@ public class RemodelController {
             "kind", saved.getKind().name(),
             "data", feData
         ));
+    }
+
+    @PostMapping("/debug")
+    public ResponseEntity<Map<String, Object>> debug(@RequestBody Map<String, String> request) {
+        String url = request.get("url");
+        if (url == null || url.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "URL이 필요합니다."));
+        }
+
+        try {
+            // 크롤링 테스트
+            String html = service.safeFetchHtml(url);
+            String cleanText = service.htmlToCleanText(html);
+            JobReqPref reqPref = service.extractReqPref(cleanText);
+            List<Keyword> keywords = service.extractKeywordsWithLLM(reqPref);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("url", url);
+            result.put("htmlLength", html.length());
+            result.put("cleanTextLength", cleanText.length());
+            result.put("cleanTextPreview", cleanText.substring(0, Math.min(500, cleanText.length())));
+            result.put("requiredCount", reqPref.getRequired().size());
+            result.put("preferredCount", reqPref.getPreferred().size());
+            result.put("required", reqPref.getRequired());
+            result.put("preferred", reqPref.getPreferred());
+            result.put("keywordsCount", keywords.size());
+            result.put("keywords", keywords);
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
     }
 }
