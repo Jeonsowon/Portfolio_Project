@@ -330,7 +330,7 @@ public class RemodelBuildService {
         // 확장된 기술 키워드 패턴 (더 많은 기술 스택 포함)
         String[] techPatterns = {
             // Backend
-            "Java", "Spring", "Spring Boot", "Spring Security", "Spring Data", "Spring Cloud",
+            "Java", "Spring", "Spring Boot", "Spring Security", "Spring Data", "Spring Cloud", "Spring Framework",
             "JPA", "Hibernate", "MyBatis", "QueryDSL",
             "Python", "Django", "Flask", "FastAPI", "Celery",
             "Node.js", "Express", "NestJS", "Koa",

@@ -50,7 +50,7 @@ const RemodelFormPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-8">
-      <h1 className="text-2xl font-bold mb-6">리모델링 생성</h1>
+      <h1 className="text-2xl font-bold mb-6">맞춤형 포트폴리오 생성</h1>
 
       {/* 1) 기본 포트폴리오 선택 */}
       <div className="bg-white border rounded p-4 mb-6">
