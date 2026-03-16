@@ -1,0 +1,11 @@
+target/
+.env
+*.log
+*.class
+TestDB.java
+TestJDBC.java
+TestDB.class
+TestJDBC.class
+boot_error.log
+spring_out.log
+spring_out2.log

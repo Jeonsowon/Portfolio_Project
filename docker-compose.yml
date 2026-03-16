@@ -1,0 +1,27 @@
+services:
+  # ========== Spring Boot 백엔드 ==========
+  backend:
+    build:
+      context: ./portfolio-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=${DB_URL}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+
+  # ========== React 프론트엔드 (Nginx) ==========
+  frontend:
+    build:
+      context: ./portfolio-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&prepareThreshold=0
-    username: postgres.piboztgutnoboayeokwf
-    password: wjsthdnjs22!@
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&prepareThreshold=0}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres.piboztgutnoboayeokwf}
+    password: ${SPRING_DATASOURCE_PASSWORD:wjsthdnjs22!@}
   jpa:
     hibernate:
       ddl-auto: update # 개발용 (운영에서는 validate 권장)
