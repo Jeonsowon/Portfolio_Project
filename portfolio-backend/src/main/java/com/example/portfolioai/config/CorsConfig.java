@@ -18,10 +18,12 @@ public class CorsConfig {
         // Bearer 토큰이라 쿠키 안 쓰므로 false 권장 (쿠키 쓸 땐 true + 정확한 Origin 지정)
         config.setAllowCredentials(false);
 
-        // 프론트 도메인(개발용) — 필요하면 127.0.0.1도 추가
+        // 프론트 도메인(개발/도커 nginx) — 필요하면 127.0.0.1도 추가
         config.setAllowedOriginPatterns(List.of(
             "http://localhost:5173",
-            "http://127.0.0.1:5173"
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
         ));
 
         // 필요한 헤더만 명시
