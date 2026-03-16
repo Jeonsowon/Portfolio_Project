@@ -167,7 +167,7 @@ public class RemodelController {
             String html = service.safeFetchHtml(url);
             String cleanText = service.htmlToCleanText(html);
             JobReqPref reqPref = service.extractReqPref(cleanText);
-            List<Keyword> keywords = service.extractKeywordsWithLLM(reqPref);
+            List<Keyword> keywords = service.extractKeywords(reqPref);
 
             Map<String, Object> result = new HashMap<>();
             result.put("url", url);

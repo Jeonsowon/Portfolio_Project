@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&prepareThreshold=0
+    username: postgres.piboztgutnoboayeokwf
+    password: wjsthdnjs22!@
   jpa:
     hibernate:
       ddl-auto: update # 개발용 (운영에서는 validate 권장)
@@ -21,11 +21,6 @@ jwt:
   secret: ${JWT_SECRET:}
   ttlMillis: 3000000
 
-openai:
-  api-url: https://api.openai.com/v1
-  api-key: ${OPENAI_API_KEY}
-  model: gpt-4o-mini
-  max-output-tokens: 500
 
 logging:
   level:
@@ -36,5 +31,3 @@ server:
   port: 8080
 
 remodel:
-  ai:
-    enabled: false

@@ -59,15 +59,6 @@ public class RemodelBuildService {
     private final RestTemplate http;
     private final PortfolioRepository portfolioRepository;
 
-    @Value("${openai.api.key}")
-    private String openaiApiKey;
-
-    @Value("${openai.model:gpt-5}")
-    private String openaiModel;
-
-    @Value("${remodel.ai.enabled:false}")
-    private boolean aiEnabled;
-
     public RemodelBuildService(ObjectMapper om, PortfolioRepository portfolioRepository) {
         this.om = om;
         this.portfolioRepository = portfolioRepository;
@@ -104,8 +95,8 @@ public class RemodelBuildService {
             rp = new JobReqPref(List.of(clean), List.of());
         }
 
-        // 3) LLM으로 키워드+가중치 추출 (입력은 섹션만 → 짧음)
-        List<Keyword> keywords = extractKeywordsWithLLM(rp);
+        // 3) 키워드 추출 (입력은 섹션만 → 짧음)
+        List<Keyword> keywords = extractKeywords(rp);
 
         // 4) 키워드 기반 점수화 → skills / projects 정렬
         PortfolioData reordered = reorderPortfolio(base, keywords);
@@ -298,31 +289,18 @@ public class RemodelBuildService {
     }
 
     // ======== 3) 키워드/가중치 추출 ========
-    public List<Keyword> extractKeywordsWithLLM(JobReqPref rp) {
+    public List<Keyword> extractKeywords(JobReqPref rp) {
         String reqTxt = String.join("\n- ", rp.getRequired());
         String prefTxt = String.join("\n- ", rp.getPreferred());
         
         logger.debug("자격요건 텍스트: {}", reqTxt);
         logger.debug("우대사항 텍스트: {}", prefTxt);
 
-        // AI 비활성화시 폴백 사용
-        if (!aiEnabled) {
-            logger.info("규칙 기반 키워드 추출 사용");
-            return getFallbackKeywords(reqTxt, prefTxt);
-        }
-
-        // AI 추출 시도 (현재 비활성화 상태)
-        logger.info("AI 키워드 추출 시도");
-        try {
-            // AI 로직은 유지하되 현재는 사용하지 않음
-            return getFallbackKeywords(reqTxt, prefTxt);
-        } catch (Exception e) {
-            logger.warn("AI 키워드 추출 실패, 폴백 사용: {}", e.getMessage());
-            return getFallbackKeywords(reqTxt, prefTxt);
-        }
+        logger.info("규칙 기반 키워드 추출 사용");
+        return getFallbackKeywords(reqTxt, prefTxt);
     }
-    
-    // 폴백 키워드 추출 (규칙 기반) - 개선된 버전
+
+    // 정책 기반 키워드 추출
     private List<Keyword> getFallbackKeywords(String reqTxt, String prefTxt) {
         logger.info("폴백 키워드 추출 시작");
         List<Keyword> keywords = new ArrayList<>();
@@ -330,8 +308,8 @@ public class RemodelBuildService {
         // 확장된 기술 키워드 패턴 (더 많은 기술 스택 포함)
         String[] techPatterns = {
             // Backend
-            "Java", "Spring", "Spring Boot", "Spring Security", "Spring Data", "Spring Cloud", "Spring Framework",
-            "JPA", "Hibernate", "MyBatis", "QueryDSL",
+            "Java", "Spring", "Spring Boot", "Spring Security", "Spring Data", "Spring Cloud",
+            "JPA", "Hibernate", "MyBatis", "QueryDSL", "Spring Framework",
             "Python", "Django", "Flask", "FastAPI", "Celery",
             "Node.js", "Express", "NestJS", "Koa",
             "Go", "Gin", "Echo", "Fiber",
